@@ -1,0 +1,11 @@
+[
+  {"question":"Show total revenue by quarter","expected_tools":["sql"]},
+  {"question":"What does the quarterly update say about gross margin?","expected_tools":["rag"]},
+  {"question":"Why did sales decline, and what does management say about demand?","expected_tools":["sql","rag"]},
+  {"question":"Find the latest news about outdoor retail industry trends","expected_tools":["web"]},
+  {"question":"Compare top products by revenue with the latest market news","expected_tools":["sql","web"]},
+  {"question":"According to the report, what are the key operational risks?","expected_tools":["rag"]},
+  {"question":"Who are the top 5 customers by revenue?","expected_tools":["sql"]},
+  {"question":"Compare quarterly revenue with management's forward outlook","expected_tools":["sql","rag"]},
+  {"question":"Summarize this public page https://example.com","expected_tools":["web"]}
+]

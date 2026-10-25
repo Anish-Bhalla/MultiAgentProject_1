@@ -1,0 +1,4 @@
+-r requirements.txt
+# Optional dense / hybrid retrieval; first run downloads the model listed by EMBEDDING_MODEL.
+chromadb>=0.5,<2.0
+sentence-transformers>=3,<6

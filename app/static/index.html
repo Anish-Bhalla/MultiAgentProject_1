@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MCP Enterprise Intelligence Agent</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17202a; background: #f4f6f9; }
+    body { margin: 0; }
+    header { background: #142436; color: #fff; padding: 22px max(18px, calc((100vw - 1040px)/2)); }
+    header h1 { margin: 0 0 6px; font-size: 1.4rem; }
+    header p { margin: 0; color: #c8d4df; line-height: 1.5; }
+    main { max-width: 1040px; margin: 24px auto; padding: 0 16px 40px; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, .8fr); gap: 18px; }
+    .card { background: white; border: 1px solid #dce3ea; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px #1525360a; min-width: 0; }
+    textarea { width: 100%; min-height: 110px; box-sizing: border-box; resize: vertical; border: 1px solid #bac7d3; border-radius: 9px; padding: 12px; font: inherit; }
+    button, select { font: inherit; border-radius: 8px; padding: 9px 13px; border: 1px solid #c3ccd6; cursor: pointer; background: #fff; }
+    button.primary { background: #175cd3; color: white; border-color: #175cd3; }
+    button:disabled { opacity: .5; cursor: wait; }
+    .actions { display: flex; gap: 9px; margin: 10px 0 18px; flex-wrap: wrap; }
+    .hint { color: #596a7a; font-size: .9rem; line-height: 1.5; }
+    h2 { margin: 0 0 12px; font-size: 1.05rem; }
+    h3 { font-size: .95rem; margin-bottom: 6px; }
+    #answer { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: .96rem; }
+    .pill { display: inline-block; border: 1px solid #ced8e1; background: #f7f9fb; border-radius: 999px; padding: 4px 9px; font-size: .78rem; margin: 0 5px 6px 0; color: #32485a; }
+    .source { padding: 10px 0; border-bottom: 1px solid #edf0f3; overflow-wrap: anywhere; }
+    .source:last-child { border-bottom: 0; }
+    .source a { color: #175cd3; }
+    .meta { color: #667789; font-size: .82rem; margin: 5px 0; }
+    #feedback { display:none; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e6ebef; }
+    #feedback textarea { min-height: 65px; margin-top: 10px; }
+    .status { margin: 10px 0; font-size: .88rem; color: #596a7a; }
+    .warning { background: #fff6e8; border: 1px solid #f3d5a7; border-radius: 8px; padding: 10px; margin: 8px 0; font-size: .88rem; }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; margin-top: 14px; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>MCP Enterprise Intelligence Agent</h1>
+  <p>Multi-agent investigation across structured SQL data, indexed documents and optional web tools.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Ask a business question</h2>
+    <textarea id="question" maxlength="5000">What are our top 5 products by revenue, and what does the quarterly update say about demand?</textarea>
+    <div class="actions">
+      <button class="primary" id="ask">Investigate</button>
+      <button id="ingest">Re-index documents</button>
+      <button id="health">Check status</button>
+    </div>
+    <p class="hint">Try: “Show revenue by quarter”, “What does the update say about demand?”, or “Compare product revenue with the latest market news.”</p>
+    <div id="status" class="status">Ready.</div>
+    <div id="plan"></div>
+    <h2>Answer</h2>
+    <div id="answer" class="hint">Your answer will appear here. Without an LLM API key the app uses a deterministic demo-mode report.</div>
+    <div id="warnings"></div>
+    <div id="feedback">
+      <h3>Rate this answer</h3>
+      <select id="category">
+        <option value="other">Other</option><option value="wrong_sql">Wrong SQL</option><option value="wrong_data">Wrong data</option>
+        <option value="wrong_retrieval">Wrong retrieval</option><option value="missing_information">Missing information</option>
+        <option value="incorrect_reasoning">Incorrect reasoning</option><option value="hallucination">Hallucination</option>
+        <option value="poor_answer">Poor answer</option><option value="security_issue">Security issue</option>
+      </select>
+      <textarea id="comment" placeholder="What was wrong or helpful? (optional)"></textarea>
+      <div class="actions"><button id="positive">👍 Helpful</button><button id="negative">👎 Not helpful</button></div>
+    </div>
+  </section>
+  <aside class="card">
+    <h2>Evidence sources</h2>
+    <div id="sources" class="hint">Sources will be listed here, including document/page metadata or web links.</div>
+    <h2 style="margin-top:22px">Execution trace</h2>
+    <div id="trace" class="hint">Planner, agents, verifier and synthesizer steps will appear here.</div>
+    <h2 style="margin-top:22px">Indexed documents</h2>
+    <div id="documents" class="hint">Checking the local index...</div>
+  </aside>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let lastTraceId = null;
+const jsonFetch = async (url, options={}) => {
+  const response = await fetch(url, { headers: {"Content-Type":"application/json"}, ...options });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || response.statusText);
+  return data;
+};
+function setStatus(text) { $('status').textContent = text; }
+function renderList(container, items, render) { container.replaceChildren(); if (!items || !items.length) { container.textContent = 'No items returned.'; return; } items.forEach((item) => container.appendChild(render(item))); }
+function element(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
+function isSafeHttpUrl(value) { try { const url = new URL(value, window.location.origin); return ['http:', 'https:'].includes(url.protocol); } catch (_) { return false; } }
+async function loadDocuments() {
+  try { const data = await jsonFetch('/api/documents'); renderList($('documents'), data.documents || [], (doc) => { const div = element('div','source'); div.append(element('strong','',doc.source)); div.append(element('div','meta',`${doc.chunks} chunks · indexed ${doc.indexed_at || ''}`)); return div; }); }
+  catch (err) { $('documents').textContent = err.message; }
+}
+$('ask').addEventListener('click', async () => {
+  const question = $('question').value.trim(); if (question.length < 3) { setStatus('Enter a longer question.'); return; }
+  $('ask').disabled = true; $('feedback').style.display = 'none'; $('answer').textContent = 'Investigating...'; $('sources').textContent = ''; $('trace').textContent = ''; $('warnings').replaceChildren(); setStatus('Running the agent workflow...');
+  try {
+    const data = await jsonFetch('/api/chat', {method:'POST', body:JSON.stringify({question})});
+    lastTraceId = data.trace_id; $('answer').textContent = data.answer || 'No answer generated.';
+    $('plan').replaceChildren(); (data.plan?.tasks || []).forEach(t => $('plan').append(element('span','pill',t)));
+    renderList($('sources'), data.sources || [], (src) => { const div = element('div','source'); div.append(element('strong','',`[${src.id}] ${src.title || src.type}`)); div.append(element('div','meta',src.type || 'source')); if (src.url && isSafeHttpUrl(src.url)) { const link = element('a','',src.citation || src.url); link.href=new URL(src.url, window.location.origin).href; link.target='_blank'; link.rel='noopener noreferrer'; div.append(link); } else div.append(element('div','meta',src.citation || '')); if (src.excerpt) div.append(element('p','hint',src.excerpt.slice(0,220))); return div; });
+    renderList($('trace'), data.steps || [], step => { const div = element('div','source'); div.append(element('strong','',`${step.step}: ${step.status}`)); div.append(element('div','meta',`${step.duration_ms} ms · ${step.detail || ''}`)); return div; });
+    (data.warnings || []).forEach(w => $('warnings').append(element('div','warning',w)));
+    $('feedback').style.display = 'block'; setStatus(`Completed in ${data.duration_ms} ms · route: ${data.route} · trace: ${data.trace_id}`);
+    await loadDocuments();
+  } catch (err) { $('answer').textContent = `Request failed: ${err.message}`; setStatus('Failed. Check the API and server logs.'); }
+  finally { $('ask').disabled = false; }
+});
+$('ingest').addEventListener('click', async () => { $('ingest').disabled = true; setStatus('Re-indexing documents...'); try { const data = await jsonFetch('/api/documents/ingest',{method:'POST',body:'{}'}); setStatus(`Indexed ${data.chunks_indexed} chunks from ${data.files_seen} files.`); await loadDocuments(); } catch (err) { setStatus(err.message); } finally { $('ingest').disabled=false; } });
+$('health').addEventListener('click', async () => { try { const data = await jsonFetch('/health'); setStatus(`Status: ${data.status} · LLM: ${data.llm_enabled?'enabled':'demo mode'} · RAG: ${data.rag_mode} · documents: ${data.indexed_documents}`); await loadDocuments(); } catch (err) { setStatus(err.message); } });
+async function sendFeedback(rating) { if (!lastTraceId) return; try { await jsonFetch('/api/feedback',{method:'POST',body:JSON.stringify({trace_id:lastTraceId,rating,category:$('category').value,comment:$('comment').value})}); setStatus('Feedback saved. It is logged for evaluation; model weights are not automatically changed.'); } catch (err) { setStatus(err.message); } }
+$('positive').addEventListener('click',()=>sendFeedback('positive'));
+$('negative').addEventListener('click',()=>sendFeedback('negative'));
+loadDocuments();
+</script>
+</body>
+</html>

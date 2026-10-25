@@ -1,0 +1,26 @@
+{
+  "local_research": {
+    "enabled": true,
+    "transport": "stdio",
+    "command": "python",
+    "args": ["-m", "app.mcp_servers.local_tools"],
+    "cwd": ".",
+    "env": {}
+  },
+  "fetch_optional": {
+    "enabled": false,
+    "transport": "stdio",
+    "command": "uvx",
+    "args": ["mcp-server-fetch"],
+    "cwd": ".",
+    "env": {}
+  },
+  "github_optional": {
+    "enabled": false,
+    "transport": "stdio",
+    "command": "docker",
+    "args": ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"],
+    "cwd": ".",
+    "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"}
+  }
+}
